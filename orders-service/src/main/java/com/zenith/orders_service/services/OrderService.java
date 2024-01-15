@@ -1,11 +1,15 @@
 package com.zenith.orders_service.services;
 
 
+import com.zenith.orders_service.events.OrderEvent;
+import com.zenith.orders_service.models.enums.OrderStatus;
 import com.zenith.orders_service.models.dtos.*;
 import com.zenith.orders_service.models.entities.Order;
 import com.zenith.orders_service.models.entities.OrderItems;
 import com.zenith.orders_service.repositories.OrderRepository;
+import com.zenith.orders_service.utils.JsonUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -18,11 +22,11 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final WebClient.Builder webClientBuilder;
+    private final KafkaTemplate<String,String> kafkaTemplate;
 
     public OrderResponse placeOrder(OrderRequest orderRequest){
 
         //Check for inventory
-
         BaseResponse result = this.webClientBuilder.build()
                 .post()
                 .uri("lb://inventory-service/api/inventory/in-stock")
@@ -38,7 +42,13 @@ public class OrderService {
             order.setOrderItemsList(orderRequest.getOrderItemsList().stream().map(orderItemsRequest -> mapOrderItemRequestToOrderItem(orderItemsRequest,order)).toList());
 
            var savedOrder = this.orderRepository.save(order);
+
+           this.kafkaTemplate.send("orders-topic", JsonUtils.toJson(
+                   new OrderEvent(savedOrder.getOrderNumber(),savedOrder.getOrderItemsList().size(), OrderStatus.PLACED)
+           ));
+
            return mapToOrderResponse(savedOrder);
+
         }else{
             throw new IllegalArgumentException("Some of the products are not in stock");
         }
