@@ -49,7 +49,7 @@ services:
       - 3307
 
 
-  #Postgress database for products
+  #Postgress database for Keycloak
   db-keycloak:
     container_name: db-keycloak
     image: postgres:15.2
